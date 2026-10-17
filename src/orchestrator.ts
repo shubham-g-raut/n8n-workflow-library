@@ -81,9 +81,9 @@ export class WorkflowOrchestrator {
         const parsedWorkflows = this.parser.parseWorkflows(workflows, urls);
         this.logger.info(`Parsed ${parsedWorkflows.length} workflows`);
         
-        // Step 6: Save parsed workflows to database
+        // Step 6: Save business/functional index
         for (const parsedWorkflow of parsedWorkflows) {
-          await this.database.saveParsedWorkflow(parsedWorkflow);
+          await this.database.saveBusinessIndex(parsedWorkflow);
         }
         
         // Step 7: Generate and log summary
@@ -120,7 +120,7 @@ export class WorkflowOrchestrator {
         const parsedWorkflows = this.parser.parseWorkflows(workflows, workflowUrls);
         
         for (const parsedWorkflow of parsedWorkflows) {
-          await this.database.saveParsedWorkflow(parsedWorkflow);
+          await this.database.saveBusinessIndex(parsedWorkflow);
         }
         
         this.logger.info(`Successfully processed ${parsedWorkflows.length} workflows`);

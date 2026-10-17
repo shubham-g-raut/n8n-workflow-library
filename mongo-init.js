@@ -4,14 +4,28 @@
 db = db.getSiblingDB('n8n-workflows');
 
 // Create collections
-db.createCollection('parsed_workflows');
 db.createCollection('crawl_results');
+db.createCollection('workflows');
+db.createCollection('nodes');
+db.createCollection('edges');
 
 // Create indexes for better performance
-db.parsed_workflows.createIndex({ "workflow_id": 1 }, { unique: true });
-db.parsed_workflows.createIndex({ "workflow_name": "text" });
-db.parsed_workflows.createIndex({ "normalized_nodes.functional_role": 1 });
-db.parsed_workflows.createIndex({ "metadata.crawled_at": 1 });
+// Business/functional indexes
+db.workflows.createIndex({ "workflow_id": 1 }, { unique: true });
+db.workflows.createIndex({ "url": 1 });
+db.workflows.createIndex({ "index_meta.roles": 1 });
+db.workflows.createIndex({ "index_meta.modalities": 1 });
+db.workflows.createIndex({ "index_meta.has_on_error_route": 1 });
+db.workflows.createIndex({ "scrape_ref": 1 });
+db.workflows.createIndex({ title: "text", description: "text", tags: "text" });
+
+db.nodes.createIndex({ "workflow_ref": 1 });
+db.nodes.createIndex({ "functional_role": 1 });
+db.nodes.createIndex({ "node_type": 1 });
+
+db.edges.createIndex({ "workflow_ref": 1 });
+db.edges.createIndex({ "from_node_id": 1, "to_node_id": 1 });
+
 
 db.crawl_results.createIndex({ "url": 1 });
 db.crawl_results.createIndex({ "timestamp": 1 });
@@ -27,5 +41,5 @@ db.crawl_results.createIndex({ "success": 1 });
 // });
 
 print('✅ n8n-workflows database initialized successfully');
-print('📊 Collections created: parsed_workflows, crawl_results');
+print('📊 Collections created: workflows, nodes, edges, crawl_results');
 print('🔍 Indexes created for optimal search performance');

@@ -194,14 +194,17 @@ The crawler uses multiple fallback methods to extract workflow data:
 
 ### Collections
 
-- **`parsed_workflows`**: Normalized workflow data with full-text search
+- **`workflows`**: Business/functional index with `index_meta` and `graph` plus raw template
+- **`nodes`**: Per-node details for each workflow (role, inputs/outputs, constraints)
+- **`edges`**: Per-edge connections with channel/condition
 - **`crawl_results`**: Raw crawl results and metadata
 
 ### Indexes
 
-- Unique index on `workflow_id`
-- Text index on `workflow_name`
-- Indexes on functional roles and timestamps
+- `workflows`: unique on `workflow_id`, text on `title/description/tags`, role/modalities/error-route fields
+- `nodes`: by `workflow_ref`, `functional_role`, `node_type`
+- `edges`: by `workflow_ref` and composite `from_node_id/to_node_id`
+- `scrape_runs`: by `started_at` and `status`
 
 ## Performance Considerations
 

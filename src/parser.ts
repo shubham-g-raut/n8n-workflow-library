@@ -28,6 +28,10 @@ export class WorkflowParser {
       
       const metadata = this.generateMetadata(workflow, normalizedNodes);
 
+      const indexMeta = this.generateIndexMeta(workflow, normalizedNodes, normalizedEdges);
+
+      const graph = this.generateGraph(normalizedNodes, normalizedEdges);
+
       const parsedWorkflow: ParsedWorkflow = {
         workflow_id: workflow.id,
         workflow_name: workflow.name,
@@ -35,7 +39,9 @@ export class WorkflowParser {
         raw_template: workflow,
         normalized_nodes: normalizedNodes,
         normalized_edges: normalizedEdges,
-        metadata
+        metadata,
+        index_meta: indexMeta,
+        graph
       };
 
       this.logger.info(`Successfully parsed workflow: ${workflow.name} with ${normalizedNodes.length} nodes and ${normalizedEdges.length} edges`);
@@ -119,7 +125,7 @@ export class WorkflowParser {
   }
 
   private isTransformNode(nodeType: string, nodeName: string): boolean {
-    const transformKeywords = ['function', 'code', 'transform', 'map', 'merge', 'spreadsheet', 'filter', 'sort'];
+    const transformKeywords = ['function', 'code', 'transform', 'map', 'merge', 'spreadsheet', 'filter', 'sort', 'if', 'switch'];
     const transformNodeTypes = [
       'n8n-nodes-base.function', 'n8n-nodes-base.code', 'n8n-nodes-base.merge',
       'n8n-nodes-base.spreadsheetFile', 'n8n-nodes-base.filter'
@@ -238,7 +244,8 @@ export class WorkflowParser {
       max_tries: undefined,
       wait_between_tries: undefined,
       timeout: undefined,
-      error_handling: undefined
+      error_handling: undefined,
+      retry_policy: 'exponential_backoff'
     };
 
     // Extract retry configuration
@@ -313,6 +320,84 @@ export class WorkflowParser {
       transform_nodes: transformNodes,
       crawled_at: new Date(),
       parsed_at: new Date()
+    };
+  }
+
+  private generateIndexMeta(workflow: N8nWorkflow, nodes: NormalizedNode[], edges: NormalizedEdge[]): any {
+    const roleCounts = {
+      trigger: nodes.filter(n => n.functional_role === 'trigger').length,
+      connector: nodes.filter(n => n.functional_role === 'connector').length,
+      transform: nodes.filter(n => n.functional_role === 'transform').length,
+      other: nodes.filter(n => n.functional_role === 'other').length
+    };
+
+    const modalitiesSet = new Set<'files' | 'data' | 'webhooks'>();
+
+    for (const node of nodes) {
+      const typeLower = node.node_type.toLowerCase();
+      const nameLower = node.display_name.toLowerCase();
+
+      // Webhooks modality: any trigger or explicit webhook/trigger
+      if (node.functional_role === 'trigger' || typeLower.includes('webhook') || nameLower.includes('webhook') || nameLower.includes('trigger')) {
+        modalitiesSet.add('webhooks');
+      }
+
+      // Files modality: spreadsheet/binary/file
+      if (typeLower.includes('spreadsheet') || typeLower.includes('file') || typeLower.includes('binary') || nameLower.includes('spreadsheet') || nameLower.includes('file')) {
+        modalitiesSet.add('files');
+      }
+
+      // Data modality: HTTP/DB
+      if (typeLower.includes('http') || typeLower.includes('request') || typeLower.includes('postgres') || typeLower.includes('mysql') || typeLower.includes('mongodb') || typeLower.includes('db') || typeLower.includes('database')) {
+        modalitiesSet.add('data');
+      }
+    }
+
+    const hasOnErrorRoute = this.detectOnErrorRoute(workflow, nodes, edges);
+
+    return {
+      roles: roleCounts,
+      modalities: Array.from(modalitiesSet),
+      has_on_error_route: hasOnErrorRoute,
+      retry_policy: 'exponential_backoff'
+    };
+  }
+
+  private detectOnErrorRoute(workflow: N8nWorkflow, nodes: NormalizedNode[], edges: NormalizedEdge[]): boolean {
+    // Heuristics:
+    // 1) Node named 'Error' or 'On Error' (case-insensitive)
+    // 2) Node type includes 'errorTrigger'
+    // 3) Any edge channel/condition mentions 'error'
+    const namePattern = /^(on\s*error|error|error handler)$/i;
+
+    if (nodes.some(n => namePattern.test(n.display_name))) {
+      return true;
+    }
+
+    if (nodes.some(n => n.node_type.toLowerCase().includes('errortrigger'))) {
+      return true;
+    }
+
+    if (edges.some(e => (e.channel && e.channel.toLowerCase().includes('error')) || (typeof e.condition === 'string' && e.condition.toLowerCase().includes('error')))) {
+      return true;
+    }
+
+    // Fallback: if workflow meta hints at error handling
+    const metaText = JSON.stringify(workflow.meta || {}).toLowerCase();
+    if (metaText.includes('error')) return true;
+
+    return false;
+  }
+
+  private generateGraph(nodes: NormalizedNode[], edges: NormalizedEdge[]) {
+    return {
+      nodes: nodes.map(n => ({
+        node_id: n.node_id,
+        display_name: n.display_name,
+        node_type: n.node_type,
+        functional_role: n.functional_role
+      })),
+      edges
     };
   }
 
